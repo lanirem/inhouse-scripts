@@ -1,2 +1,5 @@
-# inhouse-scripts
-Scripts that work mostly in our Bruker 7T at LANIREM
+# In-House Scripts
+
+Here we upload scripts tailored for our data acquisition at LANIREM.
+
+
