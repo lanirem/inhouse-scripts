@@ -1,46 +1,46 @@
 #!/bin/bash
-​
+
 set -euo pipefail
 set -x
-​
+
 tmpdir=$(mktemp -d)
-​
+
 input=$1
 output=$2
-​
+
 mincmath -clamp -const2 0 $(mincstats -max -quiet ${input}) ${input} ${tmpdir}/clamp.mnc
-​
+
 volmash -swap zy ${tmpdir}/clamp.mnc ${tmpdir}/mash.mnc
-​
+
 volcentre -zero_dircos -com ${tmpdir}/mash.mnc ${tmpdir}/centre.mnc
-​
+
 minc_anlm --rician --mt $(nproc) ${tmpdir}/centre.mnc ${tmpdir}/denoise.mnc
-​
-​
+
+
 ImageMath 3 ${tmpdir}/weight.mnc ThresholdAtMean ${tmpdir}/denoise.mnc 0.5
 ImageMath 3 ${tmpdir}/weight.mnc GetLargestComponent ${tmpdir}/weight.mnc
-​
+
 ImageMath 3 ${tmpdir}/cropmask.mnc FillHoles ${tmpdir}/weight.mnc 2
 ImageMath 3 ${tmpdir}/denoise.mnc PadImage ${tmpdir}/denoise.mnc 50
 antsApplyTransforms -d 3 -i ${tmpdir}/cropmask.mnc -r ${tmpdir}/denoise.mnc -n GenericLabel --verbose -o ${tmpdir}/cropmask.mnc
 ImageMath 3 ${tmpdir}/denoise.mnc m ${tmpdir}/denoise.mnc ${tmpdir}/cropmask.mnc
-​
+
 ExtractRegionFromImageByMask 3 ${tmpdir}/denoise.mnc ${tmpdir}/denoise.crop.mnc ${tmpdir}/cropmask.mnc 1 10
 mv -f ${tmpdir}/denoise.crop.mnc ${tmpdir}/denoise.mnc
-​
+
 minccalc -unsigned -byte -expression '1' ${tmpdir}/denoise.mnc ${tmpdir}/initmask.mnc
 antsApplyTransforms -d 3 -i ${tmpdir}/weight.mnc -r ${tmpdir}/denoise.mnc -n GenericLabel --verbose -o ${tmpdir}/weight.mnc
   
 N4BiasFieldCorrection -d 3 -i ${tmpdir}/denoise.mnc -b [30] -c [300x300x300,1e-5] -r 0 -w ${tmpdir}/weight.mnc -x ${tmpdir}/initmask.mnc \
 -o ${tmpdir}/N4.mnc -s 4 --verbose
-​
+
 ThresholdImage 3 ${tmpdir}/N4.mnc ${tmpdir}/otsu.mnc Otsu 1
-​
-fixedfile=Fisher_rat_atlas/Fischer344_template.mnc
+
+fixedfile=/mnt/MD1200A/QUARANTINE/resources/Fischer344/Fischer344_template.mnc
 movingfile=${tmpdir}/N4.mnc
-fixedmask=Fisher_rat_atlas/Fischer344_mask.mnc
+fixedmask=/mnt/MD1200A/QUARANTINE/resources/Fischer344/Fischer344_mask.mnc
 movingmask=NOMASK
-​
+
 antsRegistration --dimensionality 3 --verbose --minc \
   --output [ ${tmpdir}/reg ] \
   --use-histogram-matching 0 \
@@ -69,14 +69,14 @@ antsRegistration --dimensionality 3 --verbose --minc \
   --shrink-factors 2x1x1x1 \
   --smoothing-sigmas 0.106165225036x0.053082612518x0.026541306259x0mm \
   --masks [ ${fixedmask},NOMASK ]
-​
+
 antsApplyTransforms -d 3 -i ${fixedmask} -r ${movingfile} -t [${tmpdir}/reg0_GenericAffine.xfm,1] \
 -n GenericLabel --verbose \
 -o ${tmpdir}/mask.mnc
-​
+
 ImageMath 3 ${tmpdir}/weight.mnc m ${tmpdir}/otsu.mnc ${tmpdir}/mask.mnc
-​
+
 N4BiasFieldCorrection -d 3 -i ${tmpdir}/denoise.mnc -b [30] -c [300x300x300,1e-5] -r 0 -w ${tmpdir}/weight.mnc -x ${tmpdir}/initmask.mnc \
 -o ${output} -s 4 --verbose
-​
+
 rm -rf ${tmpdir}
